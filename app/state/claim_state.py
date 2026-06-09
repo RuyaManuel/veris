@@ -11,6 +11,11 @@ class ClaimState(TypedDict):
     claimant_id: str
     raw_documents: list[dict]  # multiple raw documents each requiring extensive metadata definition.
 
+
+    # Decision making agent data
+    next_agent: Optional[Literal["fraud", "coverage", "audit"]]
+    decision_reasoning: str
+
     # Document Organising agent
     claim_type: Optional[str]
     claimed_amount: Optional[float]
