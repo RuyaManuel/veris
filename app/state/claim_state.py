@@ -13,8 +13,8 @@ class ClaimState(TypedDict):
 
 
     # Decision making agent data
-    next_agent: Optional[Literal["fraud", "coverage", "audit"]]
-    decision_reasoning: str
+    next_agent: Optional[Literal["fraud_analysis", "coverage_analysis", "finish","escalate",]]
+    # decision_reasoning: str
 
     # Document Organising agent
     claim_type: Optional[str]
@@ -53,6 +53,7 @@ def create_claim(raw_documents: list[dict],claimant_id: str,policy_id: str) -> C
         "claimed_amount": None,
         "incident_date": None,
         "extracted_fields": None,
+        "next_agent": 'finish',
 
         "coverage_matched": None,
         "coverage_reasoning": None,

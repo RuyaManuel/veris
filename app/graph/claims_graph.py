@@ -6,6 +6,10 @@ from app.agents.fraud import fraud_scan
 from app.agents.coverage import _coverage
 from app.agents.audit import run_audit
 from app.agents.escalation import run_escalation
+from app.state.claim_state import create_claim
+from app.sample_document.raw_document import raw_documents
+
+
 
 graph = StateGraph(ClaimState)
 
@@ -34,3 +38,6 @@ graph.add_edge("fraud","decision")
 graph.add_edge('coverage',"decision")
 graph.add_edge("escalate","audit")
 graph.add_edge('audit', END)
+
+
+app = graph.compile()
