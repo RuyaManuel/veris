@@ -3,31 +3,27 @@ import uuid
 from datetime import datetime, timezone
 
 
-class ClaimState(TypedDict):
+class VerisState(TypedDict):
     # Claim identity
     claim_id: str
+    claim_type: Optional[str]
     submitted_at: str                          # ISO string — safe to serialize
     policy_id: str
     claimant_id: str
-    raw_documents: list[dict]  # multiple raw documents each requiring extensive metadata definition.
-
-
-    # Decision making agent data
-    next_agent: Optional[Literal["fraud_analysis", "coverage_analysis", "finish","escalate",]]
-    # decision_reasoning: str
-
-    # Document Organising agent
-    claim_type: Optional[str]
+    raw_documents: Optional[list[dict]]
+    processed_documents: Optional[list[dict]]
+    claimant_statement: str
     claimed_amount: Optional[float]
     incident_date: Optional[str]
+    # Decision State
+    next_agent: Optional[Literal["fraud_analysis", "coverage_analysis", "finish","escalate",]]
     extracted_fields: Optional[dict]
-
-    # Coverage agent output
+    policy_metadata: Optional[dict]
+    # Coverage State
     coverage_matched: Optional[bool]
     coverage_reasoning: Optional[str]
     coverage_exceptions: Optional[list[dict]]
-
-    # Fraud agent output
+    # Fraud State
     fraud_score: Optional[float]
     fraud_signals: Optional[list[str]]
 
@@ -40,7 +36,7 @@ class ClaimState(TypedDict):
     current_stage: str
 
 
-def create_claim(raw_documents: list[dict],claimant_id: str,policy_id: str) -> ClaimState:
+def create_claim(raw_documents: list[dict],claimant_id: str,policy_id: str) -> VerisState:
     now = datetime.now(timezone.utc).isoformat()
     return {
         "claim_id": str(uuid.uuid4()),

@@ -1,17 +1,13 @@
 from langgraph.graph import StateGraph, START, END
-from app.state.claim_state import ClaimState
+from app.state.claim_state import VerisState
 from app.agents.organiser import run_organiser
 from app.agents.decision import make_decision
 from app.agents.fraud import fraud_scan
 from app.agents.coverage import _coverage
 from app.agents.audit import run_audit
 from app.agents.escalation import run_escalation
-from app.state.claim_state import create_claim
-from app.sample_document.raw_document import raw_documents
 
-
-
-graph = StateGraph(ClaimState)
+graph = StateGraph(VerisState)
 
 # node setup
 graph.add_node("organiser", run_organiser)
@@ -23,7 +19,7 @@ graph.add_node('escalate',run_escalation)
 
 # Edge setup
 # routing function defined here:
-def route_choice(state: ClaimState):
+def route_choice(state: VerisState):
     return state["next_agent"]
 
 graph.add_edge(START, "organiser")
