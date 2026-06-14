@@ -5,9 +5,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
-SUPABASE_KEY= os.getenv("SUPABASE_KEY")
+SERVICE_ROLE_KEY= os.getenv("SERVICE_ROLE_KEY")
 
-if not SUPABASE_KEY or not SUPABASE_URL:
+if not SERVICE_ROLE_KEY or not SUPABASE_URL:
     raise ValueError("Missing Database credentials!")
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY )
+supabase: Client = create_client(SUPABASE_URL, SERVICE_ROLE_KEY )

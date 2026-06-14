@@ -36,7 +36,7 @@ class VerisState(TypedDict):
     current_stage: str
 
 
-def create_claim(raw_documents: list[dict],claimant_id: str,policy_id: str) -> VerisState:
+def build_claim_state(raw_documents: list[dict],claimant_id: str,policy_id: str) -> VerisState:
     now = datetime.now(timezone.utc).isoformat()
     return {
         "claim_id": str(uuid.uuid4()),

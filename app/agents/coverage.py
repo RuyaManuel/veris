@@ -1,4 +1,4 @@
-from app.state.claim_state import ClaimState
+from app.state.claim_state import VerisState
 
-def _coverage(state: ClaimState):
+def _coverage(state: VerisState):
     return

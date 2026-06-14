@@ -1,4 +1,4 @@
-from app.state.claim_state import ClaimState
+from app.state.claim_state import VerisState
 
-def run_audit(state: ClaimState):
+def run_audit(state: VerisState):
     return

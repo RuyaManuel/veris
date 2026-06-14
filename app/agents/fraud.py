@@ -1,4 +1,4 @@
-from app.state.claim_state import ClaimState
+from app.state.claim_state import VerisState
 
-def fraud_scan(state: ClaimState):
+def fraud_scan(state:VerisState):
     return
