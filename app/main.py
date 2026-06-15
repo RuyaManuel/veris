@@ -1,10 +1,9 @@
-from app.state.claim_state import build_claim_state
+from app.state.claim_state import build_claim_state, BuildParams
 from app.graph.claims_graph import app
 from app.database.database import supabase
-import time
 
 
-def get_pending_claims(limit: int = 5):
+def start_agent(limit: int = 5):
     result = (
         supabase.table("claims")
         .select("*")
@@ -12,11 +11,25 @@ def get_pending_claims(limit: int = 5):
         .limit(limit)
         .execute()
     )
-    return result.data
 
-claims = get_pending_claims()
-print(claims)
+    print({"result data": result.data})
+    for row in result.data:
+        params = BuildParams(
+            claim_id=row["id"],
+            policy_id=row["policy_id"],
+            claimant_id=row["claimant_id"],
+            raw_documents=row.get("raw_documents"),
+            claimant_statement=row["claimant_statement"],
+        )
 
-# claims_data = {
-#     "claim_id": claims.claims_id
-# }
+        state = build_claim_state(params)
+    
+        try:
+            final_state = app.invoke(state)
+        except Exception as e:
+            print(f"Claim {row['id']} failed: {e}")
+            continue
+
+
+if __name__ == "__main__":
+    start_agent(limit=4)

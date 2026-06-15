@@ -1,5 +1,6 @@
 from typing import TypedDict, Literal, Optional
 import uuid
+from pydantic import BaseModel
 from datetime import datetime, timezone
 
 
@@ -10,15 +11,19 @@ class VerisState(TypedDict):
     submitted_at: str                          # ISO string — safe to serialize
     policy_id: str
     claimant_id: str
-    raw_documents: Optional[list[dict]]
-    processed_documents: Optional[list[dict]]
     claimant_statement: str
+
+    #After document / claim processing.
+    document_analysis: Optional[list[dict]]
     claimed_amount: Optional[float]
     incident_date: Optional[str]
-    # Decision State
-    next_agent: Optional[Literal["fraud_analysis", "coverage_analysis", "finish","escalate",]]
     extracted_fields: Optional[dict]
-    policy_metadata: Optional[dict]
+
+    # Decision State
+    next_agent: Optional[Literal["fraud", "coverage", "finish","escalate","process"]]
+    decision: Optional[Literal["approved", "denied", "escalated"]]
+    decision_reasoning: Optional[str]
+
     # Coverage State
     coverage_matched: Optional[bool]
     coverage_reasoning: Optional[str]
@@ -26,41 +31,50 @@ class VerisState(TypedDict):
     # Fraud State
     fraud_score: Optional[float]
     fraud_signals: Optional[list[str]]
-
-    # Decision agent output
-    decision: Optional[Literal["approved", "denied", "escalated"]]
-    decision_reasoning: Optional[str]
-
     # Audit
     audit_trail: list[dict]                    # append-only, never overwrite
     current_stage: str
 
 
-def build_claim_state(raw_documents: list[dict],claimant_id: str,policy_id: str) -> VerisState:
+class BuildParams(BaseModel):
+    raw_documents: Optional[list[dict]]
+    claimant_id: str
+    policy_id: str
+    claim_id: str
+    claimant_statement: str
+
+
+def build_claim_state(params: BuildParams) -> VerisState:
     now = datetime.now(timezone.utc).isoformat()
     return {
-        "claim_id": str(uuid.uuid4()),
+        # initial intake
+        "claim_id": params.claim_id,
         "submitted_at": now,
-        "claimant_id" : claimant_id,
-        "raw_documents": raw_documents,
-        "policy_id": policy_id,
-
+        "claimant_id" : params.claimant_id,
+        "policy_id": params.policy_id,
+        "raw_documents": params.raw_documents,
+        "claimant_statement": params.claimant_statement,
+        
+        # Processed information
+        "processed_documents": None,
         "claim_type": None,
         "claimed_amount": None,
         "incident_date": None,
         "extracted_fields": None,
-        "next_agent": 'finish',
-
+        "next_agent": 'process',
         "coverage_matched": None,
         "coverage_reasoning": None,
         "coverage_exceptions": None,
 
+        #fraud related information
         "fraud_score": None,
         "fraud_signals": None,
-
+        
+        # Decision related information
         "decision": None,
         "decision_reasoning": None,
 
+        # final state: audit trail
         "audit_trail": [
             {
                 "stage": "intake",

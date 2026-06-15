@@ -41,6 +41,12 @@ class PolicyMetadataRequest(BaseModel):
     source_document_hash: Optional[str] = None
     extraction_model: Optional[str] = None
 
+class DocumentRequest(BaseModel):
+    filename: str
+    file_url: str
+    claim_id: str
+    status: str
+
 @app.post('/register')
 def register_client(request: RegisterClient):
     print("This works!")
@@ -150,3 +156,28 @@ def create_policy_metadata(request: PolicyMetadataRequest):
         raise HTTPException(status_code=500, detail="Failed to create policy metadata")
 
     return {"metadata_id": metadata_id, "status": "created"}
+
+
+@app.post('/documents')
+def insert_documents(request: DocumentRequest):
+    now = datetime.now(timezone.utc).isoformat()
+    document_id = str(uuid.uuid4())
+
+    row = {
+        "id" : document_id,
+        "claim_id": request.claim_id,
+        "filename": request.filename,
+        "file_url": request.file_url,
+        "status": request.status,
+        "uploaded_at": now
+    }
+
+    try:
+        result = supabase.table("documents").insert(row).execute()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+    if not result.data:
+        raise HTTPException(status_code=500, detail="failed to insert documents to database")
+    
+    return {"document_id": document_id, "status": "created"}
