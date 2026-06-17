@@ -20,7 +20,10 @@ graph.add_node('escalate',run_escalation)
 # Edge setup
 # routing function defined here:
 def route_choice(state: VerisState):
-    return state["next_agent"]
+    next_agent = state.get("next_agent")
+    if not next_agent:
+        raise ValueError(f"decision node did not set next_agent. State: {state}")
+    return next_agent
 
 graph.add_edge(START, "processor")
 graph.add_edge("processor","decision")

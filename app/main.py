@@ -12,18 +12,15 @@ def start_agent(limit: int = 5):
         .execute()
     )
 
-    print({"result data": result.data})
     for row in result.data:
         params = BuildParams(
             claim_id=row["id"],
             policy_id=row["policy_id"],
             claimant_id=row["claimant_id"],
-            raw_documents=row.get("raw_documents"),
             claimant_statement=row["claimant_statement"],
         )
 
         state = build_claim_state(params)
-    
         try:
             final_state = app.invoke(state)
         except Exception as e:

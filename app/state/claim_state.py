@@ -37,7 +37,6 @@ class VerisState(TypedDict):
 
 
 class BuildParams(BaseModel):
-    raw_documents: Optional[list[dict]]
     claimant_id: str
     policy_id: str
     claim_id: str
@@ -52,7 +51,6 @@ def build_claim_state(params: BuildParams) -> VerisState:
         "submitted_at": now,
         "claimant_id" : params.claimant_id,
         "policy_id": params.policy_id,
-        "raw_documents": params.raw_documents,
         "claimant_statement": params.claimant_statement,
         
         # Processed information
@@ -61,7 +59,7 @@ def build_claim_state(params: BuildParams) -> VerisState:
         "claimed_amount": None,
         "incident_date": None,
         "extracted_fields": None,
-        "next_agent": 'process',
+        "next_agent": None,
         "coverage_matched": None,
         "coverage_reasoning": None,
         "coverage_exceptions": None,
