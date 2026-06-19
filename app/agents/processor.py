@@ -1,16 +1,15 @@
 import httpx
-import os
+# import os
 import base64
 import io
 from datetime import datetime, timezone
 from app.state.claim_state import VerisState
 from app.database.database import supabase
-import moondream as md
 from PIL import Image
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
-load_dotenv()
-model = md.vl(api_key=os.getenv("MOONDREAM_KEY"))
+
+# load_dotenv()
 
 def fetch_document_bytes(url: str) -> bytes:
     with httpx.Client(timeout=30) as client:
@@ -18,49 +17,34 @@ def fetch_document_bytes(url: str) -> bytes:
         response.raise_for_status()
         return response.content
 
-# def analyze_with_moondream(param:str, prompt: str) -> str:
-#         # for now we use an external api just so we get the automation right.
-#         raw_bytes = fetch_document_bytes(param)
-#         image = Image.open(io.BytesIO(raw_bytes))
-#         image = image.convert("RGB")
-#         result = model.query(image, prompt)
-#         return result["answer"]
-
 def analyze_with_moondream(url: str, prompt: str) -> str:
     raw_bytes = fetch_document_bytes(url)
-    image = Image.open(io.BytesIO(raw_bytes))
-    image = image.convert("RGB")
-    
+    image = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
     # save to fresh buffer to ensure clean image data
     buffer = io.BytesIO()
     image.save(buffer, format="JPEG")
-    buffer.seek(0)
-    clean_image = Image.open(buffer)
-    
-    result = model.query(clean_image, prompt)
-    return result["answer"]
+    jpeg_bytes = buffer.getvalue()
+    base64_image = base64.b64encode(jpeg_bytes).decode("utf-8") 
+    ollama_url = "http://localhost:11434/api/generate"   
+
+    payload = {
+        "model": "moondream:v2",
+        "prompt": prompt,
+        "images": [base64_image],
+        "stream": False,  # Crucial: This returns a single JSON object instead of a stream
+        "keep_alive":0
+    }
+
+    timeout_config = httpx.Timeout(connect=10.0, read=180.0, write=20.0, pool=10.0)
+
+    with httpx.Client(timeout=timeout_config) as client:
+        response = client.post(ollama_url, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        return result["response"]
 
 image_analysis_prompt = """
-You are an AI claims assessor for a solar installation insurance system. Analyze the submitted image and return a structured assessment covering two areas:
-## 1. DOCUMENT VALIDITY
-- Document type detected (invoice, installation certificate, warranty, site survey, photo evidence, other)
-- Visual consistency: fonts, alignment, spacing, logo placement — flag irregularities
-- Signs of digital manipulation: clean edges, mismatched backgrounds, artifacting, inconsistent lighting or shadows
-- Signs of AI generation: overly perfect layout, generic content, unnatural uniformity
-- Authenticity signal: GENUINE / SUSPICIOUS / LIKELY FABRICATED — with brief reasoning
-- Confidence: HIGH / MEDIUM / LOW
-
-## 2. DAMAGE ASSESSMENT
-- Visible components: panels, inverter, mounting hardware, wiring, roof interface
-- Damage type per affected component: physical impact, burn marks, corrosion, delamination, cracking, water ingress
-- Severity per component: MINOR / MODERATE / SEVERE / TOTAL LOSS
-- Consistency signal: does visible damage match a plausible incident — CONSISTENT / INCONSISTENT / UNCLEAR
-- Overall claim validity signal with reasoning
-
-## 3. FLAGS FOR HUMAN REVIEW
-List any observations across either section that require a human adjudicator. If none, state "No flags raised."
----
-Be specific and evidence-based. If a component or document element is not visible or not assessable from this image, state that explicitly rather than inferring. This assessment is a preliminary automated screen — final decisions are made by a licensed human adjudicator.
+Describe the content of this image.
 """
 
 
@@ -75,7 +59,6 @@ def process_docs(state: VerisState) -> VerisState:
     )
 
     docs = result.data or []
-    document_analysis = []
 
     for doc in docs:
         url = doc.get("file_url")
@@ -99,7 +82,7 @@ def process_docs(state: VerisState) -> VerisState:
             # process doc with moondream ai
 
             image_analysis = analyze_with_moondream(url,image_analysis_prompt)
-            print({"analysis_complete",image_analysis})
+            print("analysis_complete",image_analysis)
 
         except Exception as e:
              print(f"Doc processing error for {filename}: {e}")

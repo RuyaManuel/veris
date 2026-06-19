@@ -4,6 +4,7 @@ from app.database.database import supabase
 
 
 def start_agent(limit: int = 5):
+    print("running agent....")
     result = (
         supabase.table("claims")
         .select("*")
