@@ -14,7 +14,7 @@ class VerisState(TypedDict):
     claimant_statement: str
 
     #After document / claim processing.
-    document_analysis: Optional[list[dict]]
+    ai_document_review: Optional[list[dict]]
     claimed_amount: Optional[float]
     incident_date: Optional[str]
     extracted_fields: Optional[dict]
@@ -54,7 +54,7 @@ def build_claim_state(params: BuildParams) -> VerisState:
         "claimant_statement": params.claimant_statement,
         
         # Processed information
-        "processed_documents": None,
+        "ai_document_review": None,
         "claim_type": None,
         "claimed_amount": None,
         "incident_date": None,
