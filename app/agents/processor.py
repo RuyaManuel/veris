@@ -1,11 +1,34 @@
+import json
 import httpx
 import base64
 import io
+import os
 from datetime import datetime, timezone
 from app.state.claim_state import VerisState
 from app.database.database import supabase
 from app.database.audit import log_audit_event
 from PIL import Image
+from groq import Groq
+
+
+# Groq initialization
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+_groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+GROQ_MODEL = "llama-3.3-70b-versatile"
+
+
+MATRIX_PARSER_PROMPT = """You are an automated insurance routing classifier. 
+Analyze the raw text analysis extracted from the claim documents and match it against the official coverages listed in our policy metadata matrix.
+
+POLICY METADATA MATRIX:
+{policy_matrix}
+
+You must return ONLY a JSON object in this exact format with no extra text or markdown codeblocks:
+{{
+  "claim_classification": "<exactly match a 'claim_classification' string from the matrix, or null if no match>",
+  "required_evidence_strings": [<array of 'required_evidence_strings' from the matching matrix entry, or empty array if null>]
+}}
+"""
 
 
 def fetch_document_bytes(url: str) -> bytes:
@@ -114,6 +137,7 @@ def process_docs(state: VerisState) -> VerisState:
                 "extraction_model": "moondream:v2",
                 "processed_at": processed_at,
                 "status": "completed",
+                "document_type": document_type
             }).eq("id", doc_id).execute()
 
         except Exception as e:
@@ -142,6 +166,61 @@ def process_docs(state: VerisState) -> VerisState:
 
     state["ai_document_review"] = list(reviews_by_doc_id.values())
 
+
+    # =========================================================================
+    # 🚀 NEW: Fetch Policy Metadata Matrix & Classify Claim Type via Groq
+    # =========================================================================
+    if succeeded > 0 and _groq_client:
+        try:
+            # 1. Pull the dynamic claims matrix directly out of your Supabase metadata
+            # (Assumes your state has policy_id, adjust if keyed by project_id or contract_id)
+            policy_id = state.get("policy_id") 
+            policy_res = (
+                supabase.table("policy_metadata")
+                .select("claims_matrix")
+                .eq("policy_id", policy_id)
+                .single()
+                .execute()
+            )
+            
+            # This fetches the JSON array you showed me earlier
+            policy_matrix = policy_res.data.get("claims_matrix") or []
+            print(f"policy: {policy_matrix}")
+
+            # 2. Compile all successful analysis chunks into a single paragraph for Groq
+            combined_analysis_text = "\n\n".join([
+                r["analysis"] for r in reviews_by_doc_id.values() if r["status"] == "completed"
+            ])
+
+            # 3. Call Groq with the dynamic matrix injected as instructions
+            groq_response = _groq_client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": MATRIX_PARSER_PROMPT.format(policy_matrix=json.dumps(policy_matrix, indent=2))},
+                    {"role": "user", "content": f"Document Visual Extraction Content:\n{combined_analysis_text}"}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.0
+            )
+
+            # 4. Extract and load the output
+            extracted_output = json.loads(groq_response.choices[0].message.content)
+            
+            # 5. Populate the exact state fields your router is hungrily waiting for
+            state["claim_type"] = extracted_output.get("claim_classification")
+            state["extracted_fields"] = {
+                "required_evidence_strings": extracted_output.get("required_evidence_strings", [])
+            }
+
+            print(f"🎯 Groq successfully matched claim to type: {state['claim_type']}")
+
+        except Exception as groq_err:
+            print(f"❌ Failed to run matrix classification lookup: {groq_err}")
+            # Ensure it doesn't leave lingering state from past attempts
+            state["claim_type"] = None 
+    # =========================================================================
+
+    # ... (Your existing log_audit_event and return state block continues unchanged)
     log_audit_event(
         state,
         stage="document_review",
@@ -154,5 +233,6 @@ def process_docs(state: VerisState) -> VerisState:
         },
     )
     state["current_stage"] = "document_review"
+    print(f"This is the current state:{state}")
 
     return state

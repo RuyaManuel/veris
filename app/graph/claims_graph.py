@@ -1,7 +1,7 @@
 from langgraph.graph import StateGraph, START, END
 from app.state.claim_state import VerisState
 from app.agents.processor import process_docs
-from app.agents.decision import make_decision
+from app.agents.decision import route_decision
 from app.agents.fraud import fraud_scan
 from app.agents.coverage import _coverage
 from app.agents.audit import run_audit
@@ -11,7 +11,7 @@ graph = StateGraph(VerisState)
 
 # node setup
 graph.add_node("processor", process_docs)
-graph.add_node("decision",make_decision)
+graph.add_node("decision",route_decision)
 graph.add_node("fraud", fraud_scan)
 graph.add_node("coverage", _coverage)
 graph.add_node('audit', run_audit)

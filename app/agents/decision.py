@@ -1,22 +1,20 @@
-# from app.state.claim_state import VerisState
-
-# def make_decision(state: VerisState):
-#     # LLM must be instantiated at this particular junction.
-#     return
-
-import httpx
 import json
 import os
-
+from groq import Groq
 from app.state.claim_state import VerisState
 from app.database.audit import log_audit_event
-
+from dotenv import load_dotenv
 VALID_NEXT_AGENTS = {"fraud", "coverage", "finish", "escalate", "process"}
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# double check this against the models currently listed in Google AI Studio —
-# model IDs get renamed/deprecated over time and this isn't guaranteed current
-GEMINI_MODEL = "gemini-2.0-flash"
+
+load_dotenv()
+# 2. Update Environment Variables & Model Configs
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+# Llama 3.3 70B is great for high-accuracy structure handling, 
+# or use llama-3.1-8b-instant if you want ultra-low latency routing.
+GROQ_MODEL = "llama-3.3-70b-versatile" 
+
+_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 ROUTER_SYSTEM_PROMPT = """You are a routing component in an insurance claims pipeline. Given the current state of a claim, decide which agent should run next.
 
@@ -37,10 +35,8 @@ Respond with ONLY a JSON object in this exact shape, no other text:
 {"decision": "<one of: approved, denied>", "reasoning": "<two or three sentences explaining the decision, referencing the specific evidence that drove it>"}
 """
 
-
+# Keep your prompt builders exactly as they are
 def build_router_prompt(state: VerisState) -> str:
-    # keep this compact — fewer tokens means lower cost and faster responses,
-    # and the router doesn't need full document text to decide what's next
     context = {
         "claim_type": state.get("claim_type"),
         "claimed_amount": state.get("claimed_amount"),
@@ -58,11 +54,7 @@ def build_router_prompt(state: VerisState) -> str:
     }
     return f"Claim state:\n{json.dumps(context, default=str)}\n\nWhich agent should run next?"
 
-
 def build_finalize_prompt(state: VerisState) -> str:
-    # the final call gets fuller context than routing does — this is the
-    # actual verdict, so it needs the reasoning behind fraud and coverage,
-    # not just their status
     context = {
         "claim_type": state.get("claim_type"),
         "claimed_amount": state.get("claimed_amount"),
@@ -77,46 +69,36 @@ def build_finalize_prompt(state: VerisState) -> str:
     return f"Claim state:\n{json.dumps(context, default=str)}\n\nWhat is the final decision?"
 
 
-def _call_gemini(system_prompt: str, user_prompt: str) -> dict:
-    if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY is not set")
+# 3. Swap out the private LLM wrapper for Groq's ChatCompletion API
+def _call_groq(system_prompt: str, user_prompt: str) -> dict:
+    if not _client:
+        raise RuntimeError("GROQ_API_KEY is not set")
 
-    url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_MODEL}:generateContent?key={GEMINI_API_KEY}"
+    response = _client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ],
+        # Forces the model to respond strictly in a valid JSON schema container
+        response_format={"type": "json_object"}, 
+        temperature=0.0, # Zero temperature is vital for consistent state routing
     )
 
-    payload = {
-        "systemInstruction": {"parts": [{"text": system_prompt}]},
-        "contents": [{"parts": [{"text": user_prompt}]}],
-        "generationConfig": {
-            "response_mime_type": "application/json",
-        },
-    }
-
-    timeout_config = httpx.Timeout(connect=10.0, read=60.0, write=20.0, pool=10.0)
-
-    with httpx.Client(timeout=timeout_config) as client:
-        response = client.post(url, json=payload)
-        response.raise_for_status()
-        result = response.json()
-        text = result["candidates"][0]["content"]["parts"][0]["text"]
-        return json.loads(text)
+    return json.loads(response.choices[0].message.content)
 
 
+# 4. Your node functions remain functionally identical (just call _call_groq)
 def finalize_decision(state: VerisState) -> VerisState:
     prompt = build_finalize_prompt(state)
-
     try:
-        raw_output = _call_gemini(FINALIZE_SYSTEM_PROMPT, prompt)
+        raw_output = _call_groq(FINALIZE_SYSTEM_PROMPT, prompt)
         decision = raw_output.get("decision")
         reasoning = raw_output.get("reasoning", "")
 
         if decision not in {"approved", "denied"}:
             raise ValueError(f"Model returned invalid decision: {decision!r}")
-
     except Exception as e:
-        # never auto-approve or auto-deny on uncertainty — escalate instead
         decision = "escalated"
         reasoning = f"Final decision failed, escalating for manual review. Error: {e}"
         print(f"Finalize error: {e}")
@@ -128,31 +110,24 @@ def finalize_decision(state: VerisState) -> VerisState:
         state,
         stage="final_decision",
         note=f"Final decision: '{decision}'",
-        agent_model=GEMINI_MODEL,
+        agent_model=GROQ_MODEL,
         result={"decision": decision},
         reasoning=reasoning,
     )
-
     state["current_stage"] = "final_decision"
-
     return state
 
 
 def route_decision(state: VerisState) -> VerisState:
     prompt = build_router_prompt(state)
-
     try:
-        raw_output = _call_gemini(ROUTER_SYSTEM_PROMPT, prompt)
+        raw_output = _call_groq(ROUTER_SYSTEM_PROMPT, prompt)
         next_agent = raw_output.get("next_agent")
         routing_reasoning = raw_output.get("reasoning", "")
 
         if next_agent not in VALID_NEXT_AGENTS:
             raise ValueError(f"Model returned invalid next_agent: {next_agent!r}")
-
     except Exception as e:
-        # fail safe: if the router can't confidently decide, escalate to a
-        # human rather than guess or silently default to "finish" on a
-        # claim that hasn't actually been vetted
         next_agent = "escalate"
         routing_reasoning = f"Routing failed, escalating for manual review. Error: {e}"
         print(f"Router error: {e}")
@@ -163,7 +138,7 @@ def route_decision(state: VerisState) -> VerisState:
         state,
         stage="routing",
         note=f"Routed to '{next_agent}'",
-        agent_model=GEMINI_MODEL,
+        agent_model=GROQ_MODEL,
         result={"next_agent": next_agent},
         reasoning=routing_reasoning,
     )
@@ -172,7 +147,6 @@ def route_decision(state: VerisState) -> VerisState:
     if next_agent == "escalate":
         state["decision"] = "escalated"
         state["decision_reasoning"] = routing_reasoning
-
     elif next_agent == "finish":
         state = finalize_decision(state)
 
