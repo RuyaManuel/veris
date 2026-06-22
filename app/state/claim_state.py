@@ -12,12 +12,14 @@ class VerisState(TypedDict):
     policy_id: str
     claimant_id: str
     claimant_statement: str
+    process_attempt: int
 
     #After document / claim processing.
     ai_document_review: Optional[list[dict]]
     claimed_amount: Optional[float]
     incident_date: Optional[str]
     extracted_fields: Optional[dict]
+    policy_metadata: Optional[list[dict[str,any]]]
 
     # Decision State
     next_agent: Optional[Literal["fraud", "coverage", "finish","escalate","process"]]
@@ -54,6 +56,8 @@ def build_claim_state(params: BuildParams) -> VerisState:
         "claimant_statement": params.claimant_statement,
         
         # Processed information
+        "policy_metadata": None,
+        "process_attempt": None,
         "ai_document_review": None,
         "claim_type": None,
         "claimed_amount": None,

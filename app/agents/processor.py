@@ -177,15 +177,17 @@ def process_docs(state: VerisState) -> VerisState:
             policy_id = state.get("policy_id") 
             policy_res = (
                 supabase.table("policy_metadata")
-                .select("claims_matrix")
+                .select("*")
                 .eq("policy_id", policy_id)
                 .single()
                 .execute()
             )
             
             # This fetches the JSON array you showed me earlier
-            policy_matrix = policy_res.data.get("claims_matrix") or []
-            print(f"policy: {policy_matrix}")
+            policy_metadata = policy_res.data or {}
+            policy_matrix = policy_metadata.get("claims_matrix") or []        
+            # 3. Save the entire broader row dictionary context to your global graph state
+            state["policy_metadata"] = policy_metadata
 
             # 2. Compile all successful analysis chunks into a single paragraph for Groq
             combined_analysis_text = "\n\n".join([

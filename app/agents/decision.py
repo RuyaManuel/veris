@@ -19,16 +19,31 @@ _client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 ROUTER_SYSTEM_PROMPT = """You are a routing component in an insurance claims pipeline. Given the current state of a claim, decide which agent should run next.
 
 Available agents:
-- "process": send the claim back for document re-processing (use this if critical fields are missing or document review failed)
 - "fraud": run fraud detection (use this if fraud has not yet been assessed)
-- "coverage": run coverage matching (use this if coverage has not yet been checked)
-- "escalate": send the claim to a human reviewer (use this if something looks wrong, inconsistent, or outside what this pipeline should decide automatically)
+- "coverage": run coverage matching (use this if fraud is clear and coverage has not yet been checked)
+- "escalate": send the claim to a human reviewer — use this when:
+    * required claim fields (claimed_amount, incident_date, claim_type) are missing or null
+    * required documents are missing or fewer documents were reviewed than expected
+    * document review flagged a file as suspicious or unreadable
+    * fraud signals are present but ambiguous
+    * anything falls outside what this pipeline should decide automatically
 - "finish": all necessary checks are complete and the claim is ready for a final decision
 
-Respond with ONLY a JSON object in this exact shape, no other text:
-{"next_agent": "<one of: process, fraud, coverage, escalate, finish>", "reasoning": "<one or two sentences explaining the choice>"}
-"""
+Important: Do NOT use "process" to handle missing fields or documents. If data is absent, escalate immediately.
+The escalation_metadata field in your response should explain exactly what is missing, why it is required, and what the claimant or handler should do to resolve it.
 
+Respond with ONLY a JSON object in this exact shape, no other text:
+{
+  "next_agent": "<one of: fraud, coverage, escalate, finish>",
+  "reasoning": "<one or two sentences explaining the choice>",
+  "escalation_metadata": {
+    "missing_fields": ["<list of missing claim fields, or empty list>"],
+    "missing_documents": ["<list of missing document types, or empty list>"],
+    "flags": ["<any other issues found, or empty list>"],
+    "resolution_hint": "<what should happen to resolve this escalation>"
+  }
+}
+"""
 FINALIZE_SYSTEM_PROMPT = """You are the final decision component in an insurance claims pipeline. All required checks — document review, fraud detection, and coverage matching — have already been completed for this claim. Based on the information below, decide whether to approve or deny the claim.
 
 Respond with ONLY a JSON object in this exact shape, no other text:
@@ -111,7 +126,7 @@ def finalize_decision(state: VerisState) -> VerisState:
         stage="final_decision",
         note=f"Final decision: '{decision}'",
         agent_model=GROQ_MODEL,
-        result={"decision": decision},
+        result={"decision": decision},\
         reasoning=reasoning,
     )
     state["current_stage"] = "final_decision"
@@ -133,6 +148,8 @@ def route_decision(state: VerisState) -> VerisState:
         print(f"Router error: {e}")
 
     state["next_agent"] = next_agent
+    print(f"Decision agent's decision on the next course of action:{next_agent}")
+    print(f"these are the reasons for routing decision{routing_reasoning}")
 
     log_audit_event(
         state,

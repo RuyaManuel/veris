@@ -41,6 +41,10 @@ build/Release
 node_modules/
 jspm_packages/
 
+
+#sub folders that need exemption:
+veris_frontend/
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
