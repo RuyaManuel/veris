@@ -37,6 +37,10 @@ class VerisState(TypedDict):
     audit_trail: list[dict]                    # append-only, never overwrite
     current_stage: str
 
+    # escalation
+    escalation_id: str
+    escalation_status: str
+
 
 class BuildParams(BaseModel):
     claimant_id: str

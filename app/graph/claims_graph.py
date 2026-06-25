@@ -4,7 +4,7 @@ from app.agents.processor import process_docs
 from app.agents.decision import route_decision
 from app.agents.fraud import fraud_scan
 from app.agents.coverage import _coverage
-from app.agents.audit import run_audit
+from app.database.audit import run_audit
 from app.agents.escalation import run_escalation
 
 graph = StateGraph(VerisState)
