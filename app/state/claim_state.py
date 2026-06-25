@@ -4,27 +4,48 @@ from pydantic import BaseModel
 from datetime import datetime, timezone
 
 
+class PipelineError(TypedDict):
+    agent: str                  # "coverage", "fraud", "processor", "decision"
+    error_type: str             # "timeout", "parse_error", "network_error", "validation_error"
+    error_message: str
+    attempt_number: int
+    timestamp: str
+    context: Optional[dict]     # agent-specific detail — doc filename, model used, etc.
+
+
+
+
 class VerisState(TypedDict):
-    # Claim identity
+    # Metacontext Data.
     claim_id: str
     claim_type: Optional[str]
-    submitted_at: str                          # ISO string — safe to serialize
+    submitted_at: str                          
     policy_id: str
     claimant_id: str
+    claim_amount: Optional[float]
     claimant_statement: str
-    process_attempt: int
+    policy_metadata: Optional[list[dict[str,any]]]
+    claimant_history_summary: Optional[dict]
 
-    #After document / claim processing.
+    #Tracking Flags
+    is_document_review_done: bool
+    is_fraud_analysis_done: bool
+    is_coverage_handled: bool
+    is_escalated: bool
+    is_finalized: bool
+    next_agent: Optional[Literal["fraud", "coverage", "finish","escalate","process"]]
+
+    #Evaluation Data.
+    document_processing_errors: Optional[list[dict]]
     ai_document_review: Optional[list[dict]]
-    claimed_amount: Optional[float]
+    extracted_amount: Optional[float]
     incident_date: Optional[str]
     extracted_fields: Optional[dict]
-    policy_metadata: Optional[list[dict[str,any]]]
+    claim_verdict: Optional[Literal["approved", "denied", "escalated"]]
+    claim_verdict_reason: Optional[str]
 
-    # Decision State
-    next_agent: Optional[Literal["fraud", "coverage", "finish","escalate","process"]]
-    decision: Optional[Literal["approved", "denied", "escalated"]]
-    decision_reasoning: Optional[str]
+    # Pipeline Erros
+    pipeline_errors: Optional[list[PipelineError]]
 
     # Coverage State
     coverage_matched: Optional[bool]
