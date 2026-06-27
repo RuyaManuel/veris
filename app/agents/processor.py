@@ -17,6 +17,8 @@ _groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 GROQ_MODEL = "llama-3.3-70b-versatile"
 
 
+# Matrix parser_prompt: provides context to llm as well as an identity for narrowed reasoning. provides instruction for processin of the policy matrix 
+
 MATRIX_PARSER_PROMPT = """You are an automated insurance routing classifier. 
 Analyze the raw text analysis extracted from the claim documents and match it against the official coverages listed in our policy metadata matrix.
 

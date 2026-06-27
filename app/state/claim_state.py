@@ -2,17 +2,7 @@ from typing import TypedDict, Literal, Optional
 import uuid
 from pydantic import BaseModel
 from datetime import datetime, timezone
-
-
-class PipelineError(TypedDict):
-    agent: str                  # "coverage", "fraud", "processor", "decision"
-    error_type: str             # "timeout", "parse_error", "network_error", "validation_error"
-    error_message: str
-    attempt_number: int
-    timestamp: str
-    context: Optional[dict]     # agent-specific detail — doc filename, model used, etc.
-
-
+from app.state.types import PipelineError, FraudEvaluation, CoverageEvaluation, AuditEvent, EscalationRecord
 
 
 class VerisState(TypedDict):
@@ -26,6 +16,7 @@ class VerisState(TypedDict):
     claimant_statement: str
     policy_metadata: Optional[list[dict[str,any]]]
     claimant_history_summary: Optional[dict]
+    proccess_attempt: int
 
     #Tracking Flags
     is_document_review_done: bool
@@ -43,24 +34,25 @@ class VerisState(TypedDict):
     extracted_fields: Optional[dict]
     claim_verdict: Optional[Literal["approved", "denied", "escalated"]]
     claim_verdict_reason: Optional[str]
-
-    # Pipeline Erros
+    fraud_evaluation: Optional[FraudEvaluation]
     pipeline_errors: Optional[list[PipelineError]]
+    coverage_evaluation: Optional[CoverageEvaluation]
 
-    # Coverage State
-    coverage_matched: Optional[bool]
-    coverage_reasoning: Optional[str]
-    coverage_exceptions: Optional[list[dict]]
-    # Fraud State
-    fraud_score: Optional[float]
-    fraud_signals: Optional[list[str]]
     # Audit
-    audit_trail: list[dict]                    # append-only, never overwrite
-    current_stage: str
+    audit_trail: list[AuditEvent]                    # append-only, never overwrite
+    current_stage: Literal[
+    "intake",
+    "processor",
+    "fraud_analysis",
+    "coverage_evaluation",
+    "routing",
+    "final_decision",
+    "escalated",
+    "completed",
+]
 
     # escalation
-    escalation_id: str
-    escalation_status: str
+    escalation: Optional[EscalationRecord]
 
 
 class BuildParams(BaseModel):
@@ -73,40 +65,49 @@ class BuildParams(BaseModel):
 def build_claim_state(params: BuildParams) -> VerisState:
     now = datetime.now(timezone.utc).isoformat()
     return {
-        # initial intake
+        # ── Metacontext ──
         "claim_id": params.claim_id,
         "submitted_at": now,
-        "claimant_id" : params.claimant_id,
+        "claimant_id": params.claimant_id,
         "policy_id": params.policy_id,
         "claimant_statement": params.claimant_statement,
-        
-        # Processed information
-        "policy_metadata": None,
-        "process_attempt": None,
-        "ai_document_review": None,
+        "claim_amount": None,
         "claim_type": None,
-        "claimed_amount": None,
+        "process_attempt": 0,
+        "policy_metadata": None,
+        "claimant_history_summary": None,
+
+        # ── Tracking Flags ───
+        "is_document_review_done": False,
+        "is_fraud_analysis_done": False,
+        "is_coverage_handled": False,
+        "is_escalated": False,
+        "is_finalized": False,
+        "next_agent": None,
+
+        # ── Evaluation Data ───
+        "ai_document_review": None,
+        "extracted_amount": None,
         "incident_date": None,
         "extracted_fields": None,
-        "next_agent": None,
-        "coverage_matched": None,
-        "coverage_reasoning": None,
-        "coverage_exceptions": None,
+        "fraud_evaluation": None,
+        "coverage_evaluation": None,
 
-        #fraud related information
-        "fraud_score": None,
-        "fraud_signals": None,
-        
-        # Decision related information
-        "decision": None,
-        "decision_reasoning": None,
+        # ── Escalation ───
+        "escalation": None,
 
-        # final state: audit trail
+        # ── Pipeline Errors ──
+        "pipeline_errors": None,
+
+        # ── Audit ──
         "audit_trail": [
             {
                 "stage": "intake",
                 "timestamp": now,
                 "note": "Claim created",
+                "agent_model": None,
+                "result": None,
+                "reasoning": None,
             }
         ],
         "current_stage": "intake",
