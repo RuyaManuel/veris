@@ -39,7 +39,6 @@ def fetch_document_bytes(url: str) -> bytes:
         response.raise_for_status()
         return response.content
 
-
 def analyze_with_moondream(url: str, prompt: str) -> str:
     raw_bytes = fetch_document_bytes(url)
     image = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
